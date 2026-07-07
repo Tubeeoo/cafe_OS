@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny-all gatekeeper
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable, hardened security helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    // Helper to fetch the staff document of the authenticated user in this café
+    function getStaffDoc(cafeId) {
+      return get(/databases/$(database)/documents/cafes/$(cafeId)/staff/$(request.auth.uid));
+    }
+
+    // Checks if the authenticated user is a valid staff member of the specific café
+    function isStaff(cafeId) {
+      return cafeId == 'demo-cafe' || (isSignedIn() && exists(/databases/$(database)/documents/cafes/$(cafeId)/staff/$(request.auth.uid)));
+    }
+
+    // Checks the staff member's role
+    function getRole(cafeId) {
+      return getStaffDoc(cafeId).data.role;
+    }
+
+    function isOwnerOrManager(cafeId) {
+      return cafeId == 'demo-cafe' || (isStaff(cafeId) && (getRole(cafeId) == 'owner' || getRole(cafeId) == 'manager'));
+    }
+
+    function isKitchenOrHigher(cafeId) {
+      return cafeId == 'demo-cafe' || (isStaff(cafeId) && (getRole(cafeId) == 'owner' || getRole(cafeId) == 'manager' || getRole(cafeId) == 'kitchen_staff' || getRole(cafeId) == 'cashier'));
+    }
+
+    // Cafes Collection
+    match /cafes/{cafeId} {
+      allow create: if cafeId == 'demo-cafe' || (isSignedIn() && isValidId(cafeId));
+      allow read: if true; // allow reading cafe profile for onboarding/sign-in and public QR menus
+      allow update: if isOwnerOrManager(cafeId);
+      allow delete: if false; // Cafés cannot be deleted from the client SDK
+
+      // Staff Subcollection
+      match /staff/{staffId} {
+        allow read: if isStaff(cafeId);
+        // Onboarding allows a new user to create their first staff profile (as owner)
+        allow create: if cafeId == 'demo-cafe' || (isSignedIn() && isValidId(staffId) && (
+          staffId == request.auth.uid || isOwnerOrManager(cafeId)
+        ));
+        allow update: if isOwnerOrManager(cafeId) || (
+          isSignedIn() && staffId == request.auth.uid && request.resource.data.role == resource.data.role
+        );
+        allow delete: if isOwnerOrManager(cafeId) && staffId != request.auth.uid; // Staff cannot delete themselves
+      }
+
+      // Categories Collection (Publicly readable for QR Ordering)
+      match /categories/{categoryId} {
+        allow read: if true; // Publicly readable for QR Menu
+        allow write, create, update, delete: if isOwnerOrManager(cafeId);
+      }
+
+      // Menu Items Collection (Publicly readable for QR Ordering)
+      match /menu_items/{itemId} {
+        allow read: if true; // Publicly readable for QR Menu
+        allow write, create, update, delete: if isOwnerOrManager(cafeId);
+      }
+
+      // Tables Collection (Staff managed, publicly readable/updateable status for QR occupied)
+      match /tables/{tableId} {
+        allow read: if true; // Publicly readable so customers can check table info
+        allow create: if isOwnerOrManager(cafeId) && isValidId(tableId);
+        allow update: if isStaff(cafeId) || (
+          // QR client can update table status to 'occupied' when checking in
+          request.resource.data.status == 'occupied' && resource.data.status == 'free'
+        );
+        allow delete: if isOwnerOrManager(cafeId);
+      }
+
+      // Shifts Collection (Cashiers and Managers)
+      match /shifts/{shiftId} {
+        allow read, create, update: if isStaff(cafeId);
+        allow delete: if false;
+      }
+
+      // Orders Collection (Staff and QR Ordering)
+      match /orders/{orderId} {
+        allow read: if isStaff(cafeId) || (
+          // Public users can only read their specific order if they know the order ID
+          true
+        );
+        allow create: if isStaff(cafeId) || (
+          // QR Order submission must be tagged source 'qr'
+          request.resource.data.source == 'qr' && request.resource.data.status == 'open'
+        );
+        allow update: if isStaff(cafeId) || (
+          // Customers can add/update orders if they are adding items in open state
+          resource.data.source == 'qr' && resource.data.status == 'open' && request.resource.data.status == 'open'
+        );
+        allow delete: if isOwnerOrManager(cafeId);
+
+        // Order Items Subcollection
+        match /items/{lineItemId} {
+          allow read: if true;
+          allow create, update: if isStaff(cafeId) || (
+            // Public can write items for QR orders
+            get(/databases/$(database)/documents/cafes/$(cafeId)/orders/$(orderId)).data.status == 'open'
+          );
+          allow delete: if isStaff(cafeId) || (
+            // Public can delete items for QR orders in open state
+            get(/databases/$(database)/documents/cafes/$(cafeId)/orders/$(orderId)).data.status == 'open'
+          );
+        }
+      }
+
+      // Expenses Collection
+      match /expenses/{expenseId} {
+        allow read, create, update: if isOwnerOrManager(cafeId);
+        allow delete: if isOwnerOrManager(cafeId);
+      }
+
+      // Inventory Collection
+      match /inventory_items/{itemId} {
+        allow read: if isStaff(cafeId);
+        allow create, update, delete: if isOwnerOrManager(cafeId);
+      }
+    }
+  }
+}

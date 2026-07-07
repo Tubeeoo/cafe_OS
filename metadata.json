@@ -1,0 +1,6 @@
+{
+  "name": "Café Companion",
+  "description": "A multi-tenant café billing and POS system with automated digital menus, live seating trackers, shift analytics, and physical table QR ordering integrations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

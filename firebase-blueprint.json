@@ -1,0 +1,203 @@
+{
+  "entities": {
+    "Cafe": {
+      "title": "Cafe",
+      "description": "Details of the café tenant",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the café" },
+        "address": { "type": "string", "description": "Address of the café" },
+        "phone_1": { "type": "string", "description": "Primary contact phone" },
+        "phone_2": { "type": "string", "description": "Secondary contact phone" },
+        "gstin": { "type": "string", "description": "GSTIN Tax Number" },
+        "fssai_license": { "type": "string", "description": "FSSAI License Number" },
+        "open_time": { "type": "string", "description": "Opening hours" },
+        "close_time": { "type": "string", "description": "Closing hours" },
+        "logo_url": { "type": "string", "description": "Logo image URL" },
+        "receipt_footer": { "type": "string", "description": "Thermal receipt footer message" },
+        "table_count": { "type": "integer", "description": "Total number of physical tables" },
+        "currency": { "type": "string", "description": "Currency code like INR or USD" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["name", "created_at"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Café staff members",
+      "type": "object",
+      "properties": {
+        "authUid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Staff member's full name" },
+        "role": { "type": "string", "enum": ["owner", "manager", "cashier", "kitchen_staff"], "description": "Access control role" },
+        "pinHash": { "type": "string", "description": "Quick PIN login hash" },
+        "active": { "type": "boolean", "description": "Status of staff member" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["authUid", "name", "role", "active", "created_at"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Menu categories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Category name" },
+        "sort_order": { "type": "integer", "description": "Order of display" },
+        "icon": { "type": "string", "description": "Lucide icon key" }
+      },
+      "required": ["name", "sort_order"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Café menu items",
+      "type": "object",
+      "properties": {
+        "category_id": { "type": "string", "description": "Reference category ID" },
+        "name": { "type": "string", "description": "Item name" },
+        "price": { "type": "number", "description": "Base price excluding GST" },
+        "is_veg": { "type": "boolean", "description": "True if purely vegetarian" },
+        "veg_type": { "type": "string", "enum": ["veg", "egg", "nonveg"], "description": "FSSAI classification" },
+        "gst_rate": { "type": "number", "description": "Tax rate percent (e.g. 5, 12, 18)" },
+        "hsn_code": { "type": "string", "description": "HSN tax code" },
+        "is_available": { "type": "boolean", "description": "In stock status" },
+        "notes": { "type": "string", "description": "Brief menu description" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["category_id", "name", "price", "veg_type", "gst_rate", "is_available", "created_at"]
+    },
+    "Table": {
+      "title": "Table",
+      "description": "Café seating table",
+      "type": "object",
+      "properties": {
+        "label": { "type": "string", "description": "Table display label e.g. T1" },
+        "table_number": { "type": "integer", "description": "Numeric identifier for sorting" },
+        "capacity": { "type": "integer", "description": "Max seating capacity" },
+        "status": { "type": "string", "enum": ["free", "occupied", "reserved"], "description": "Current state" },
+        "reserved_name": { "type": "string", "description": "Reservation patron name" },
+        "reserved_time": { "type": "string", "description": "Reservation timestamp" }
+      },
+      "required": ["label", "table_number", "capacity", "status"]
+    },
+    "Shift": {
+      "title": "Shift",
+      "description": "POS shifts for cash reconciliation",
+      "type": "object",
+      "properties": {
+        "staff_id": { "type": "string", "description": "Staff ID who opened shift" },
+        "opening_cash": { "type": "number", "description": "Starting cash drawer float" },
+        "closing_cash": { "type": "number", "description": "Reconciled closing cash" },
+        "opened_at": { "type": "string", "format": "date-time", "description": "Opening timestamp" },
+        "closed_at": { "type": "string", "format": "date-time", "description": "Closing timestamp" }
+      },
+      "required": ["staff_id", "opening_cash", "opened_at"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Sales orders and bills",
+      "type": "object",
+      "properties": {
+        "table_id": { "type": "string", "description": "Physical table reference" },
+        "shift_id": { "type": "string", "description": "Shift reference" },
+        "staff_id": { "type": "string", "description": "Staff cashier reference" },
+        "source": { "type": "string", "enum": ["staff", "qr"], "description": "Order placement source" },
+        "customer_name": { "type": "string", "description": "Patron name if QR order" },
+        "status": { "type": "string", "enum": ["open", "kot_sent", "served", "settled", "void"], "description": "Workflow state" },
+        "payment_mode": { "type": "string", "enum": ["cash", "card", "upi"], "description": "Method of payment" },
+        "payment_timing": { "type": "string", "description": "Payment timeline" },
+        "subtotal": { "type": "number", "description": "Net base total" },
+        "discount_percent": { "type": "number", "description": "Applied discount percentage" },
+        "round_off": { "type": "number", "description": "Bill rounding adjustment" },
+        "total": { "type": "number", "description": "Gross billing amount" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "settled_at": { "type": "string", "format": "date-time", "description": "Payment timestamp" }
+      },
+      "required": ["table_id", "source", "status", "subtotal", "total", "created_at"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "Individual items inside a billing order (denormalized)",
+      "type": "object",
+      "properties": {
+        "menu_item_id": { "type": "string", "description": "Reference ID" },
+        "menu_item_name": { "type": "string", "description": "Denormalized snapshot name" },
+        "quantity": { "type": "integer", "description": "Quantity purchased" },
+        "unit_price": { "type": "number", "description": "Snapshot unit price" },
+        "gst_rate": { "type": "number", "description": "Snapshot GST tax rate" },
+        "note": { "type": "string", "description": "Kitchen prep instruction" }
+      },
+      "required": ["menu_item_id", "menu_item_name", "quantity", "unit_price", "gst_rate"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "General ledger business expenses",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "description": "Expense date" },
+        "category": { "type": "string", "description": "Categorization of cost" },
+        "vendor": { "type": "string", "description": "Recipient merchant" },
+        "amount": { "type": "number", "description": "Total spend" },
+        "gst_paid": { "type": "number", "description": "Taxes paid" },
+        "notes": { "type": "string", "description": "Memo" },
+        "receipt_url": { "type": "string", "description": "Uploaded bill image link" },
+        "created_at": { "type": "string", "format": "date-time", "description": "System log timestamp" }
+      },
+      "required": ["date", "category", "amount", "created_at"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Raw stock ingredients and items",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Item name" },
+        "unit": { "type": "string", "description": "Measurement unit (kg, ltr, pcs)" },
+        "current_stock": { "type": "number", "description": "Live stock count" },
+        "min_stock": { "type": "number", "description": "Reorder safety trigger point" },
+        "cost_per_unit": { "type": "number", "description": "Purchase cost per unit" },
+        "updated_at": { "type": "string", "format": "date-time", "description": "Last inventory log" }
+      },
+      "required": ["name", "unit", "current_stock", "min_stock", "updated_at"]
+    }
+  },
+  "firestore": {
+    "/cafes/{cafeId}": {
+      "schema": "Cafe",
+      "description": "Top-level Café tenant"
+    },
+    "/cafes/{cafeId}/staff/{staffId}": {
+      "schema": "Staff",
+      "description": "Tenant specific staff accounts"
+    },
+    "/cafes/{cafeId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Menu categories"
+    },
+    "/cafes/{cafeId}/menu_items/{itemId}": {
+      "schema": "MenuItem",
+      "description": "Tenant menu catalogue items"
+    },
+    "/cafes/{cafeId}/tables/{tableId}": {
+      "schema": "Table",
+      "description": "Café tables"
+    },
+    "/cafes/{cafeId}/shifts/{shiftId}": {
+      "schema": "Shift",
+      "description": "Drawer reconciliation shifts"
+    },
+    "/cafes/{cafeId}/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Billing orders"
+    },
+    "/cafes/{cafeId}/orders/{orderId}/items/{lineItemId}": {
+      "schema": "OrderItem",
+      "description": "Subcollection items for billing order"
+    },
+    "/cafes/{cafeId}/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Café operations expenses"
+    },
+    "/cafes/{cafeId}/inventory_items/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Raw ingredients and items inventory"
+    }
+  }
+}
