@@ -2,7 +2,7 @@ export type UserRole = 'owner' | 'manager' | 'cashier' | 'kitchen_staff';
 
 export type VegType = 'veg' | 'egg' | 'nonveg';
 
-export type OrderStatus = 'open' | 'kot_sent' | 'served' | 'settled' | 'void';
+export type OrderStatus = 'open' | 'kot_sent' | 'served' | 'settled' | 'void' | 'held';
 
 export type TableStatus = 'free' | 'occupied' | 'reserved';
 
@@ -97,6 +97,8 @@ export interface Order {
   total: number;
   created_at: any;
   settled_at?: any;
+  order_type?: 'dine_in' | 'takeout';
+  orderEditHistory?: { timestamp: string; previous_total: number; new_total: number; edited_by: string }[];
 }
 
 export interface OrderItem {

@@ -155,7 +155,6 @@ export default function QRMenuScreen({ cafeId, tableId, categories, menuItems }:
 
         await updateDoc(doc(db, 'cafes', cafeId, 'orders', orderId), {
           subtotal: nextSubtotal,
-          total: nextTotal,
           round_off: nextTotal - (nextSubtotal + nextGst),
           status: 'open' // trigger staff alert by reverting status to 'open' if it was KOT_SENT
         });

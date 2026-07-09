@@ -90,17 +90,18 @@ service cloud.firestore {
 
       // Orders Collection (Staff and QR Ordering)
       match /orders/{orderId} {
-        allow read: if isStaff(cafeId) || (
-          // Public users can only read their specific order if they know the order ID
-          true
-        );
+        allow get: if isStaff(cafeId) || true;
+        allow list: if isStaff(cafeId);
         allow create: if isStaff(cafeId) || (
           // QR Order submission must be tagged source 'qr'
           request.resource.data.source == 'qr' && request.resource.data.status == 'open'
         );
         allow update: if isStaff(cafeId) || (
           // Customers can add/update orders if they are adding items in open state
-          resource.data.source == 'qr' && resource.data.status == 'open' && request.resource.data.status == 'open'
+          resource.data.source == 'qr' && 
+          resource.data.status == 'open' && 
+          request.resource.data.status == 'open' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subtotal', 'round_off', 'status'])
         );
         allow delete: if isOwnerOrManager(cafeId);
 
@@ -108,8 +109,11 @@ service cloud.firestore {
         match /items/{lineItemId} {
           allow read: if true;
           allow create, update: if isStaff(cafeId) || (
-            // Public can write items for QR orders
-            get(/databases/$(database)/documents/cafes/$(cafeId)/orders/$(orderId)).data.status == 'open'
+            // Public can write items for QR orders in open state
+            get(/databases/$(database)/documents/cafes/$(cafeId)/orders/$(orderId)).data.status == 'open' &&
+            // Validate that the submitted unit_price and gst_rate match the live values of the corresponding menu_item document
+            request.resource.data.unit_price == get(/databases/$(database)/documents/cafes/$(cafeId)/menu_items/$(request.resource.data.menu_item_id)).data.price &&
+            request.resource.data.gst_rate == get(/databases/$(database)/documents/cafes/$(cafeId)/menu_items/$(request.resource.data.menu_item_id)).data.gst_rate
           );
           allow delete: if isStaff(cafeId) || (
             // Public can delete items for QR orders in open state

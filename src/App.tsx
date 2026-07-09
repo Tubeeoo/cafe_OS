@@ -27,11 +27,12 @@ import DashboardScreen from './components/DashboardScreen';
 import POSScreen from './components/POSScreen';
 import MenuScreen from './components/MenuScreen';
 import TableScreen from './components/TableScreen';
-import SettingsScreen from './components/SettingsScreen';
+import ShiftsScreen from './components/ShiftsScreen';
 import AccountingScreen from './components/AccountingScreen';
 import InventoryScreen from './components/InventoryScreen';
 import QRMenuScreen from './components/QRMenuScreen';
 import KitchenScreen from './components/KitchenScreen';
+import OrdersScreen from './components/OrdersScreen';
 
 // Modals
 import ReceiptModal from './components/ReceiptModal';
@@ -76,6 +77,7 @@ export default function App() {
 
   // Navigation states
   const [activeTab, setActiveTab] = useState<string>('pos');
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   // Modal print target IDs
   const [printReceiptId, setPrintReceiptId] = useState<string | null>(null);
@@ -313,6 +315,11 @@ export default function App() {
     setActiveTab('pos');
   };
 
+  const handleEditOrder = (orderId: string) => {
+    setEditingOrderId(orderId);
+    setActiveTab('pos');
+  };
+
   // 2. Handle direct Public QR menu routing
   if (qrUrlParams) {
     return (
@@ -337,14 +344,12 @@ export default function App() {
 
   // Define tab navigation elements
   const allTabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['owner'] },
-    { id: 'pos', label: 'POS Billing', icon: Receipt, roles: ['owner', 'manager', 'cashier'] },
-    { id: 'kitchen', label: 'Kitchen KOT', icon: Flame, roles: ['owner', 'manager', 'kitchen_staff'] },
-    { id: 'menu', label: 'Menu Book', icon: BookOpen, roles: ['owner', 'manager'] },
-    { id: 'tables', label: 'Tables Desk', icon: Users, roles: ['owner', 'manager', 'cashier'] },
-    { id: 'inventory', label: 'Inventory', icon: Grid, roles: ['owner', 'manager'] },
-    { id: 'accounting', label: 'Accounting / Tax', icon: Percent, roles: ['owner'] },
-    { id: 'settings', label: 'Shift Drawer', icon: Sliders, roles: ['owner', 'manager', 'cashier'] }
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['owner', 'manager', 'cashier'] },
+    { id: 'tables', label: 'Tables', icon: Users, roles: ['owner', 'manager', 'cashier'] },
+    { id: 'pos', label: 'New Order', icon: Receipt, roles: ['owner', 'manager', 'cashier'] },
+    { id: 'orders', label: 'Orders', icon: ShoppingBag, roles: ['owner', 'manager', 'cashier'] },
+    { id: 'shifts', label: 'Shifts', icon: Sliders, roles: ['owner', 'manager', 'cashier'] },
+    { id: 'menu', label: 'Menu', icon: BookOpen, roles: ['owner', 'manager'] }
   ];
 
   const allowedTabs = allTabs.filter(tab => tab.roles.includes(role || 'cashier'));
@@ -403,8 +408,8 @@ export default function App() {
       </header>
 
       {/* COMPONENT BODY */}
-      <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6 pb-12">
-        {activeTab === 'dashboard' && role === 'owner' && (
+      <main className="flex-1 p-6 max-w-full w-full space-y-6 pb-12">
+        {activeTab === 'dashboard' && (
           <DashboardScreen 
             orders={orders}
             tables={tables}
@@ -425,13 +430,20 @@ export default function App() {
             currency={currency}
             onShowReceipt={(id) => setPrintReceiptId(id)}
             onShowKOT={(id) => setPrintKOTId(id)}
+            editingOrderId={editingOrderId}
+            onClearEditingOrder={() => setEditingOrderId(null)}
           />
         )}
 
-        {activeTab === 'kitchen' && (
-          <KitchenScreen 
+        {activeTab === 'orders' && (
+          <OrdersScreen
             cafeId={cafe.id}
             orders={orders}
+            tables={tables}
+            currency={currency}
+            onEditOrder={handleEditOrder}
+            onShowReceipt={(id) => setPrintReceiptId(id)}
+            onShowKOT={(id) => setPrintKOTId(id)}
           />
         )}
 
@@ -450,28 +462,11 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'inventory' && (
-          <InventoryScreen 
+        {activeTab === 'shifts' && (
+          <ShiftsScreen
             cafeId={cafe.id}
-            inventory={inventory}
-            currency={currency}
-          />
-        )}
-
-        {activeTab === 'accounting' && role === 'owner' && (
-          <AccountingScreen 
-            cafeId={cafe.id}
-            expenses={expenses}
+            shifts={shifts}
             orders={orders}
-            currency={currency}
-          />
-        )}
-
-        {activeTab === 'settings' && (
-          <SettingsScreen
-            cafeId={cafe.id}
-            cafe={cafe}
-            staff={staff}
             currentShift={currentShift}
             currentUser={currentUser}
             onOpenShift={handleOpenShift}
