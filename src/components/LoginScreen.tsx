@@ -2,13 +2,20 @@ import React, { useState } from 'react';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
-  signOut
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { 
   doc, 
   setDoc, 
   getDoc,
-  collection
+  collection,
+  deleteDoc,
+  query,
+  where,
+  collectionGroup,
+  getDocs
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { Cafe, Staff, UserRole } from '../types';
@@ -156,7 +163,7 @@ export default function LoginScreen({ onLoginSuccess, onSetDemoMode }: LoginScre
         // Check if Cafe exists first
         const cafeSnap = await getDoc(doc(db, 'cafes', formattedCafeId));
         if (!cafeSnap.exists()) {
-          throw new Error(`Café with handle "${formattedCafeId}" does not exist. Create a new one instead!`);
+          throw new Error(`Café with handle "${formattedCafeId}" does not exist yet. If you want to register a new café with this handle, please toggle the "Create New Cafe" tab above. Otherwise, you can click the "Launch Demo Sandbox" button at the very top to instantly explore without signing up!`);
         }
 
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -179,7 +186,281 @@ export default function LoginScreen({ onLoginSuccess, onSetDemoMode }: LoginScre
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Authentication failed. Please check your credentials.');
+      if (err && (err.code === 'auth/operation-not-allowed' || (err.message && err.message.includes('auth/operation-not-allowed')))) {
+        setError('Firebase Auth Error: The "Email/Password" sign-in provider is disabled in your Firebase project. To use email signup/login, please enable "Email/Password" under: Firebase Console > Authentication > Sign-in method > Add new provider > Email/Password.');
+      } else {
+        setError(err.message || 'Authentication failed. Please check your credentials.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    setLoading(true);
+    setError('');
+    setInfo('');
+
+    try {
+      let formattedCafeId = cafeIdInput.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+      if (isSignUp && !formattedCafeId) {
+        throw new Error('Please enter a Café Handle in the field above before continuing with Google Auth.');
+      }
+
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
+
+      if (isSignUp) {
+        if (!cafeName.trim()) {
+          throw new Error('Café Name is required to register a new cafe.');
+        }
+
+        // Check if Cafe exists first
+        const cafeDocRef = doc(db, 'cafes', formattedCafeId);
+        const cafeSnap = await getDoc(cafeDocRef);
+        if (cafeSnap.exists()) {
+          throw new Error(`Café with handle "${formattedCafeId}" already exists!`);
+        }
+
+        const newCafe: Cafe = {
+          id: formattedCafeId,
+          name: cafeName.trim(),
+          address: cafeAddress.trim() || 'Not specified',
+          phone_1: cafePhone.trim() || 'Not specified',
+          phone_2: '',
+          gstin: '',
+          fssai_license: '',
+          open_time: '09:00 AM',
+          close_time: '11:00 PM',
+          logo_url: '',
+          receipt_footer: 'Thank you for dining with us! Come back soon.',
+          table_count: 8,
+          currency: '₹',
+          created_at: new Date().toISOString()
+        };
+
+        const pathForCafe = `cafes/${formattedCafeId}`;
+        try {
+          await setDoc(cafeDocRef, newCafe);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, pathForCafe);
+        }
+
+        // Create Owner Staff record under this Café
+        const staffDocRef = doc(db, 'cafes', formattedCafeId, 'staff', user.uid);
+        const ownerStaff: Staff = {
+          id: user.uid,
+          authUid: user.uid,
+          name: user.displayName || name.trim() || 'Owner',
+          role: 'owner',
+          active: true,
+          created_at: new Date().toISOString()
+        };
+
+        const pathForStaff = `${pathForCafe}/staff/${user.uid}`;
+        try {
+          await setDoc(staffDocRef, ownerStaff);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, pathForStaff);
+        }
+
+        // Initialize default categories and tables for a fast start
+        const defaultCats = [
+          { id: 'hot-coffee', name: 'Hot Coffee', sort_order: 1, icon: 'Coffee' },
+          { id: 'cold-beverages', name: 'Cold Beverages', sort_order: 2, icon: 'IceCream' },
+          { id: 'snacks', name: 'Snacks & Bites', sort_order: 3, icon: 'Cookie' },
+          { id: 'desserts', name: 'Desserts', sort_order: 4, icon: 'Cake' }
+        ];
+
+        for (const cat of defaultCats) {
+          await setDoc(doc(db, 'cafes', formattedCafeId, 'categories', cat.id), cat);
+        }
+
+        // Default menu items
+        const defaultItems = [
+          { category_id: 'hot-coffee', name: 'Cappuccino', price: 180, is_veg: true, veg_type: 'veg', gst_rate: 5, hsn_code: '2101', is_available: true, notes: 'Classic Italian espresso with frothy milk', created_at: new Date().toISOString() },
+          { category_id: 'hot-coffee', name: 'Cafe Latte', price: 190, is_veg: true, veg_type: 'veg', gst_rate: 5, hsn_code: '2101', is_available: true, notes: 'Rich espresso with steamed milk and light foam', created_at: new Date().toISOString() },
+          { category_id: 'snacks', name: 'Paneer Tikka Sandwich', price: 220, is_veg: true, veg_type: 'veg', gst_rate: 5, hsn_code: '2106', is_available: true, notes: 'Spicy paneer tikka with green chutney', created_at: new Date().toISOString() },
+          { category_id: 'snacks', name: 'Chicken Club Sandwich', price: 260, is_veg: false, veg_type: 'nonveg', gst_rate: 5, hsn_code: '2106', is_available: true, notes: 'Grilled chicken, eggs, lettuce, and mayo', created_at: new Date().toISOString() },
+          { category_id: 'desserts', name: 'Warm Chocolate Brownie', price: 150, is_veg: false, veg_type: 'egg', gst_rate: 18, hsn_code: '1905', is_available: true, notes: 'Decadent brownie served warm', created_at: new Date().toISOString() }
+        ];
+
+        for (const [idx, item] of defaultItems.entries()) {
+          const itemId = `item_${idx + 1}`;
+          await setDoc(doc(db, 'cafes', formattedCafeId, 'menu_items', itemId), item);
+        }
+
+        // Create 6 physical tables
+        for (let i = 1; i <= 6; i++) {
+          const tableId = `table_${i}`;
+          await setDoc(doc(db, 'cafes', formattedCafeId, 'tables', tableId), {
+            id: tableId,
+            label: `Table ${i}`,
+            table_number: i,
+            capacity: i <= 2 ? 2 : i <= 5 ? 4 : 8,
+            status: 'free'
+          });
+        }
+
+        onLoginSuccess(formattedCafeId, ownerStaff, 'owner');
+      } else {
+        // Sign In logic
+        let targetCafeId = formattedCafeId;
+        let staffData: Staff | null = null;
+
+        // Auto-discovery logic if no handle entered, or if the entered handle doesn't exist/work
+        if (!targetCafeId) {
+          // 1. Check if they are already active staff in some café
+          try {
+            const staffQuery = query(collectionGroup(db, 'staff'), where('authUid', '==', user.uid));
+            const staffQuerySnap = await getDocs(staffQuery);
+            if (!staffQuerySnap.empty) {
+              const firstDoc = staffQuerySnap.docs[0];
+              staffData = firstDoc.data() as Staff;
+              const refPath = firstDoc.ref.path.split('/');
+              if (refPath[0] === 'cafes') {
+                targetCafeId = refPath[1];
+              }
+            }
+          } catch (e) {
+            console.warn("Staff auto-discovery collection group query failed:", e);
+          }
+
+          // 2. If still not found, check if they are invited in some café
+          if (!staffData && user.email) {
+            try {
+              const inviteEmail = user.email.trim().toLowerCase();
+              const inviteQuery = query(collectionGroup(db, 'staffInvites'), where('email', '==', inviteEmail));
+              const inviteQuerySnap = await getDocs(inviteQuery);
+              if (!inviteQuerySnap.empty) {
+                const inviteDoc = inviteQuerySnap.docs[0];
+                const inviteData = inviteDoc.data();
+                const refPath = inviteDoc.ref.path.split('/');
+                if (refPath[0] === 'cafes') {
+                  targetCafeId = refPath[1];
+                  const newStaff: Staff = {
+                    id: user.uid,
+                    authUid: user.uid,
+                    name: inviteData.name || user.displayName || 'Staff Member',
+                    role: inviteData.role || 'cashier',
+                    active: true,
+                    created_at: new Date().toISOString()
+                  };
+                  const staffDocRef = doc(db, 'cafes', targetCafeId, 'staff', user.uid);
+                  await setDoc(staffDocRef, newStaff);
+                  await deleteDoc(inviteDoc.ref);
+                  staffData = newStaff;
+                }
+              }
+            } catch (e) {
+              console.warn("Invite auto-discovery collection group query failed:", e);
+            }
+          }
+
+          if (!targetCafeId) {
+            throw new Error(`Your Google account (${user.email}) is not registered or invited as active staff for any Café. Please enter a Café Handle in the field above to connect.`);
+          }
+        } else {
+          // A Café Handle was specified by the user
+          // Let's check if the Café actually exists.
+          const cafeDocRef = doc(db, 'cafes', targetCafeId);
+          const cafeSnap = await getDoc(cafeDocRef);
+          
+          if (!cafeSnap.exists()) {
+            // The specified café does not exist. Let's see if this user has an invite anyway in some OTHER cafe, 
+            // or if we can auto-discover their invite to help them.
+            if (user.email) {
+              const inviteEmail = user.email.trim().toLowerCase();
+              try {
+                const inviteQuery = query(collectionGroup(db, 'staffInvites'), where('email', '==', inviteEmail));
+                const inviteQuerySnap = await getDocs(inviteQuery);
+                if (!inviteQuerySnap.empty) {
+                  const inviteDoc = inviteQuerySnap.docs[0];
+                  const inviteData = inviteDoc.data();
+                  const refPath = inviteDoc.ref.path.split('/');
+                  if (refPath[0] === 'cafes') {
+                    targetCafeId = refPath[1];
+                    const newStaff: Staff = {
+                      id: user.uid,
+                      authUid: user.uid,
+                      name: inviteData.name || user.displayName || 'Staff Member',
+                      role: inviteData.role || 'cashier',
+                      active: true,
+                      created_at: new Date().toISOString()
+                    };
+                    const staffDocRef = doc(db, 'cafes', targetCafeId, 'staff', user.uid);
+                    await setDoc(staffDocRef, newStaff);
+                    await deleteDoc(inviteDoc.ref);
+                    staffData = newStaff;
+                  }
+                }
+              } catch (e) {
+                console.warn("Auto-discovery fallback for non-existent café handle failed:", e);
+              }
+            }
+
+            // If we still didn't find any targetCafeId or staffData, we throw the original clear error.
+            if (!staffData || targetCafeId === formattedCafeId) {
+              throw new Error(`Café with handle "${formattedCafeId}" does not exist yet. Toggle the "Create New Cafe" tab above to register a new café with this handle first, or use the "Launch Demo Sandbox" button at the top to explore!`);
+            }
+          } else {
+            // The café exists. Let's check staff document
+            const staffDocRef = doc(db, 'cafes', targetCafeId, 'staff', user.uid);
+            let staffSnap = await getDoc(staffDocRef);
+
+            if (!staffSnap.exists()) {
+              // Check if staff invite exists for this specific café
+              if (user.email) {
+                const inviteEmail = user.email.trim().toLowerCase();
+                const inviteRef = doc(db, 'cafes', targetCafeId, 'staffInvites', inviteEmail);
+                const inviteSnap = await getDoc(inviteRef);
+                
+                if (inviteSnap.exists()) {
+                  const inviteData = inviteSnap.data();
+                  const newStaff: Staff = {
+                    id: user.uid,
+                    authUid: user.uid,
+                    name: inviteData.name || user.displayName || 'Staff Member',
+                    role: inviteData.role || 'cashier',
+                    active: true,
+                    created_at: new Date().toISOString()
+                  };
+                  
+                  const pathForStaff = `cafes/${targetCafeId}/staff/${user.uid}`;
+                  try {
+                    await setDoc(staffDocRef, newStaff);
+                    await deleteDoc(inviteRef);
+                    staffData = newStaff;
+                  } catch (err) {
+                    handleFirestoreError(err, OperationType.WRITE, pathForStaff);
+                  }
+                }
+              }
+            } else {
+              staffData = staffSnap.data() as Staff;
+            }
+          }
+        }
+
+        // Final checks
+        if (!staffData) {
+          throw new Error(`Your Google account (${user.email}) is not registered as active staff for Café "${targetCafeId}".`);
+        }
+
+        if (!staffData.active) {
+          throw new Error('Your staff profile has been deactivated by the administrator.');
+        }
+
+        onLoginSuccess(targetCafeId, staffData, staffData.role);
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('Firebase Auth Error: Google Sign-In is not enabled on this Firebase project. Please enable Google provider under: Firebase Console > Authentication > Sign-in method.');
+      } else {
+        setError(err.message || 'Authentication failed. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -393,6 +674,36 @@ export default function LoginScreen({ onLoginSuccess, onSetDemoMode }: LoginScre
               )}
             </button>
           </form>
+
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200"></div>
+            </div>
+            <div className="relative flex justify-center text-[9px] uppercase font-bold tracking-wider">
+              <span className="bg-white px-2.5 text-slate-400">Or continue with</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGoogleAuth}
+            disabled={loading}
+            className="w-full py-2 bg-white hover:bg-slate-50 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-xl border border-slate-200 flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {loading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5 text-slate-600 shrink-0" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+                </svg>
+                {isSignUp ? 'Register with Google' : 'Sign In with Google'}
+              </>
+            )}
+          </button>
 
           <div className="mt-4 pt-4 border-t border-slate-100 text-center space-y-3">
             <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3 text-left">

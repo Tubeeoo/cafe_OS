@@ -12,7 +12,8 @@ import {
   ShoppingBag, 
   ArrowRight, 
   History, 
-  Utensils 
+  Utensils,
+  CreditCard 
 } from 'lucide-react';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -282,6 +283,17 @@ export default function OrdersScreen({
                   </button>
                 ) : null}
 
+                {/* Settle Bill for held/open orders */}
+                {selectedOrder.status === 'open' || selectedOrder.status === 'held' ? (
+                  <button
+                    onClick={() => onEditOrder(selectedOrder.id)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    Settle Bill
+                  </button>
+                ) : null}
+
                 {/* Print button */}
                 {selectedOrder.status === 'settled' ? (
                   <button
@@ -376,6 +388,14 @@ export default function OrdersScreen({
                 <div className="pt-2.5 mt-2 border-t border-slate-200 flex justify-between items-center text-sm font-bold">
                   <span className="text-slate-900 uppercase">Total Bill</span>
                   <span className="text-amber-800 text-lg font-mono font-black">{currency}{selectedOrder.total.toFixed(2)}</span>
+                </div>
+                
+                {/* Payment Method details */}
+                <div className="pt-2.5 mt-2 border-t border-slate-200/60 flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  <span>Payment Method</span>
+                  <span className="font-black text-slate-800 font-sans">
+                    {selectedOrder.payment_mode ? selectedOrder.payment_mode.toUpperCase() : (selectedOrder.status === 'held' ? 'HELD TAB' : 'DRAFT')}
+                  </span>
                 </div>
               </div>
 

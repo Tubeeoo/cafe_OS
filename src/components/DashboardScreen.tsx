@@ -22,7 +22,10 @@ import {
   PieChart, 
   Pie, 
   Cell, 
-  Legend 
+  Legend,
+  AreaChart,
+  Area,
+  CartesianGrid
 } from 'recharts';
 
 interface DashboardScreenProps {
@@ -122,6 +125,58 @@ export default function DashboardScreen({ orders, tables, menuItems, currency }:
     return totals;
   }, [tables]);
 
+  // 5. Last 7 Days Revenue Trend
+  const last7DaysData = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push({
+        dateStr: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        dayKey: d.toDateString(),
+        revenue: 0,
+        billsCount: 0
+      });
+    }
+
+    orders.forEach(o => {
+      if (o.status !== 'settled' || !o.created_at) return;
+      try {
+        let orderDate: Date | null = null;
+        if (o.created_at instanceof Date) {
+          orderDate = o.created_at;
+        } else if (typeof o.created_at === 'object' && o.created_at !== null) {
+          if (typeof o.created_at.toDate === 'function') {
+            orderDate = o.created_at.toDate();
+          } else if (o.created_at.seconds) {
+            orderDate = new Date(o.created_at.seconds * 1000);
+          }
+        }
+        
+        if (!orderDate && (typeof o.created_at === 'string' || typeof o.created_at === 'number')) {
+          orderDate = new Date(o.created_at);
+        }
+
+        if (orderDate && !isNaN(orderDate.getTime())) {
+          const orderDateStr = orderDate.toDateString();
+          const matchedDay = days.find(day => day.dayKey === orderDateStr);
+          if (matchedDay) {
+            matchedDay.revenue += (o.total || 0);
+            matchedDay.billsCount += 1;
+          }
+        }
+      } catch (e) {
+        console.error("Error parsing order date in trends:", e);
+      }
+    });
+
+    return days.map(day => ({
+      date: day.dateStr,
+      revenue: Number(day.revenue.toFixed(2)),
+      billsCount: day.billsCount
+    }));
+  }, [orders]);
+
   return (
     <div id="dashboard-screen" className="space-y-6 animate-fade-in text-slate-700">
       
@@ -195,6 +250,76 @@ export default function DashboardScreen({ orders, tables, menuItems, currency }:
               CGST + SGST split managed
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* 7-Day Sales Revenue Trends */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm animate-fade-in">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h4 className="text-sm font-black uppercase tracking-wider text-slate-900">7-Day Sales Revenue Trends</h4>
+            <p className="text-xs text-slate-400 font-medium">Daily sales performance and settled transactions for the last 7 days</p>
+          </div>
+          <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/50">
+            <TrendingUp className="w-4 h-4 stroke-[2.5]" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Weekly Performance</span>
+          </div>
+        </div>
+        <div className="h-72 pt-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={last7DaysData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#B45309" stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor="#B45309" stopOpacity={0.01}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+              <XAxis 
+                dataKey="date" 
+                tick={{ fill: '#64748B', fontSize: 10, fontWeight: '700' }} 
+                axisLine={false} 
+                tickLine={false} 
+              />
+              <YAxis 
+                tick={{ fill: '#64748B', fontSize: 10, fontWeight: '700' }} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(val) => `${currency}${val}`}
+              />
+              <Tooltip 
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-slate-900 text-white p-3 rounded-xl border border-slate-800 shadow-md text-xs font-mono">
+                        <p className="font-bold text-slate-400 mb-1.5">{label}</p>
+                        <div className="space-y-1">
+                          <p className="flex justify-between gap-4">
+                            <span className="text-slate-400 font-sans">Revenue:</span>
+                            <span className="font-bold text-amber-400">{currency}{data.revenue.toLocaleString()}</span>
+                          </p>
+                          <p className="flex justify-between gap-4">
+                            <span className="text-slate-400 font-sans">Bills Settled:</span>
+                            <span className="font-bold text-emerald-400">{data.billsCount}</span>
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="revenue" 
+                stroke="#B45309" 
+                strokeWidth={2.5} 
+                fillOpacity={1} 
+                fill="url(#colorRevenue)" 
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

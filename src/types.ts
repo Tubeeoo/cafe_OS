@@ -21,6 +21,7 @@ export interface Cafe {
   table_count: number;
   currency: string;
   created_at: any;
+  staffCanEditMenu?: boolean;
 }
 
 export interface Staff {
@@ -133,3 +134,13 @@ export interface InventoryItem {
   cost_per_unit: number;
   updated_at: any;
 }
+
+export interface StaffInvite {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  cafeId: string;
+  created_at: any;
+}
+

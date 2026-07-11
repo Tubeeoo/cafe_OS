@@ -5,7 +5,9 @@ import {
   doc, 
   setDoc, 
   getDoc,
-  updateDoc 
+  updateDoc,
+  deleteDoc,
+  getDocs
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { 
@@ -33,6 +35,7 @@ import InventoryScreen from './components/InventoryScreen';
 import QRMenuScreen from './components/QRMenuScreen';
 import KitchenScreen from './components/KitchenScreen';
 import OrdersScreen from './components/OrdersScreen';
+import SettingsScreen from './components/SettingsScreen';
 
 // Modals
 import ReceiptModal from './components/ReceiptModal';
@@ -55,7 +58,8 @@ import {
   ShoppingBag, 
   BookOpen, 
   Users,
-  Grid
+  Grid,
+  Settings
 } from 'lucide-react';
 
 export default function App() {
@@ -74,6 +78,7 @@ export default function App() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
+  const [syncError, setSyncError] = useState<{ source: string; message: string } | null>(null);
 
   // Navigation states
   const [activeTab, setActiveTab] = useState<string>('pos');
@@ -98,6 +103,31 @@ export default function App() {
   // 1. Launch a fully populated real demo sandbox
   const handleLaunchDemo = async () => {
     const demoId = 'demo-cafe';
+    
+    // Clear existing collections for demo-cafe to reset back to seed state
+    const collectionsToClear = ['orders', 'categories', 'menu_items', 'tables', 'inventory_items'];
+    for (const colName of collectionsToClear) {
+      try {
+        const colRef = collection(db, 'cafes', demoId, colName);
+        const snap = await getDocs(colRef);
+        for (const docSnap of snap.docs) {
+          // If it's orders, also delete nested items subcollection
+          if (colName === 'orders') {
+            try {
+              const itemsSnap = await getDocs(collection(db, 'cafes', demoId, 'orders', docSnap.id, 'items'));
+              for (const itemDoc of itemsSnap.docs) {
+                await deleteDoc(doc(db, 'cafes', demoId, 'orders', docSnap.id, 'items', itemDoc.id));
+              }
+            } catch (innerErr) {
+              console.error('Error clearing nested items:', innerErr);
+            }
+          }
+          await deleteDoc(doc(db, 'cafes', demoId, colName, docSnap.id));
+        }
+      } catch (err) {
+        console.error(`Error clearing ${colName} for demo reset:`, err);
+      }
+    }
     
     // Quick creation of demo cafe documents
     const cafeRef = doc(db, 'cafes', demoId);
@@ -191,54 +221,117 @@ export default function App() {
     if (!cafeId) return;
 
     // A. Cafe profile listener
-    const unsubCafe = onSnapshot(doc(db, 'cafes', cafeId), (snap) => {
-      if (snap.exists()) {
-        setCafe(snap.data() as Cafe);
+    const unsubCafe = onSnapshot(
+      doc(db, 'cafes', cafeId),
+      (snap) => {
+        if (snap.exists()) {
+          setCafe(snap.data() as Cafe);
+        }
+      },
+      (error) => {
+        console.error('Firestore sync error for Cafe profile:', error);
+        setSyncError({ source: 'Café Profile', message: error.message || String(error) });
       }
-    });
+    );
 
     // B. Categories listener
-    const unsubCats = onSnapshot(collection(db, 'cafes', cafeId, 'categories'), (snap) => {
-      setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Category[]);
-    });
+    const unsubCats = onSnapshot(
+      collection(db, 'cafes', cafeId, 'categories'),
+      (snap) => {
+        setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Category[]);
+      },
+      (error) => {
+        console.error('Firestore sync error for Categories:', error);
+        setSyncError({ source: 'Categories List', message: error.message || String(error) });
+      }
+    );
 
     // C. Menu Items listener
-    const unsubItems = onSnapshot(collection(db, 'cafes', cafeId, 'menu_items'), (snap) => {
-      setMenuItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as MenuItem[]);
-    });
+    const unsubItems = onSnapshot(
+      collection(db, 'cafes', cafeId, 'menu_items'),
+      (snap) => {
+        setMenuItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as MenuItem[]);
+      },
+      (error) => {
+        console.error('Firestore sync error for Menu Items:', error);
+        setSyncError({ source: 'Menu Items', message: error.message || String(error) });
+      }
+    );
 
     // D. Physical Seating Tables listener
-    const unsubTables = onSnapshot(collection(db, 'cafes', cafeId, 'tables'), (snap) => {
-      setTables(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Table[]);
-    });
+    const unsubTables = onSnapshot(
+      collection(db, 'cafes', cafeId, 'tables'),
+      (snap) => {
+        setTables(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Table[]);
+      },
+      (error) => {
+        console.error('Firestore sync error for Tables:', error);
+        setSyncError({ source: 'Tables Mapping', message: error.message || String(error) });
+      }
+    );
 
     // E. Orders ledger listener
-    const unsubOrders = onSnapshot(collection(db, 'cafes', cafeId, 'orders'), (snap) => {
-      setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[]);
-    });
+    const unsubOrders = onSnapshot(
+      collection(db, 'cafes', cafeId, 'orders'),
+      (snap) => {
+        setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[]);
+      },
+      (error) => {
+        console.error('Firestore sync error for Orders:', error);
+        setSyncError({ source: 'Orders Ledger', message: error.message || String(error) });
+      }
+    );
 
     // F. Expenses ledger listener
-    const unsubExpenses = onSnapshot(collection(db, 'cafes', cafeId, 'expenses'), (snap) => {
-      setExpenses(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[]);
-    });
+    const unsubExpenses = onSnapshot(
+      collection(db, 'cafes', cafeId, 'expenses'),
+      (snap) => {
+        setExpenses(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[]);
+      },
+      (error) => {
+        console.error('Firestore sync error for Expenses:', error);
+        setSyncError({ source: 'Expenses Ledger', message: error.message || String(error) });
+      }
+    );
 
     // G. Pantry Inventory listener
-    const unsubInventory = onSnapshot(collection(db, 'cafes', cafeId, 'inventory_items'), (snap) => {
-      setInventory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as InventoryItem[]);
-    });
+    const unsubInventory = onSnapshot(
+      collection(db, 'cafes', cafeId, 'inventory_items'),
+      (snap) => {
+        setInventory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as InventoryItem[]);
+      },
+      (error) => {
+        console.error('Firestore sync error for Pantry Inventory:', error);
+        setSyncError({ source: 'Pantry Inventory', message: error.message || String(error) });
+      }
+    );
 
     // H. Staff directory listener
-    const unsubStaff = onSnapshot(collection(db, 'cafes', cafeId, 'staff'), (snap) => {
-      setStaff(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Staff[]);
-    });
+    const unsubStaff = onSnapshot(
+      collection(db, 'cafes', cafeId, 'staff'),
+      (snap) => {
+        setStaff(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Staff[]);
+      },
+      (error) => {
+        console.error('Firestore sync error for Staff directory:', error);
+        setSyncError({ source: 'Staff Directory', message: error.message || String(error) });
+      }
+    );
 
     // I. Cashier Shifts listener
-    const unsubShifts = onSnapshot(collection(db, 'cafes', cafeId, 'shifts'), (snap) => {
-      const allShifts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Shift[];
-      setShifts(allShifts);
-      const active = allShifts.find(s => s.status === 'open');
-      setCurrentShift(active || null);
-    });
+    const unsubShifts = onSnapshot(
+      collection(db, 'cafes', cafeId, 'shifts'),
+      (snap) => {
+        const allShifts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Shift[];
+        setShifts(allShifts);
+        const active = allShifts.find(s => s.status === 'open');
+        setCurrentShift(active || null);
+      },
+      (error) => {
+        console.error('Firestore sync error for Cashier Shifts:', error);
+        setSyncError({ source: 'Cashier Shifts', message: error.message || String(error) });
+      }
+    );
 
     return () => {
       unsubCafe();
@@ -349,7 +442,8 @@ export default function App() {
     { id: 'pos', label: 'New Order', icon: Receipt, roles: ['owner', 'manager', 'cashier'] },
     { id: 'orders', label: 'Orders', icon: ShoppingBag, roles: ['owner', 'manager', 'cashier'] },
     { id: 'shifts', label: 'Shifts', icon: Sliders, roles: ['owner', 'manager', 'cashier'] },
-    { id: 'menu', label: 'Menu', icon: BookOpen, roles: ['owner', 'manager'] }
+    { id: 'menu', label: 'Menu', icon: BookOpen, roles: ['owner', 'manager'] },
+    { id: 'settings', label: 'Settings', icon: Settings, roles: ['owner', 'manager'] }
   ];
 
   const allowedTabs = allTabs.filter(tab => tab.roles.includes(role || 'cashier'));
@@ -409,6 +503,25 @@ export default function App() {
 
       {/* COMPONENT BODY */}
       <main className="flex-1 p-6 max-w-full w-full space-y-6 pb-12">
+        {syncError && (
+          <div className="flex items-start justify-between gap-3 bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl text-xs font-bold shadow-sm no-print">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 text-red-500 mt-0.5 animate-pulse" />
+              <div>
+                <span className="block font-black uppercase text-[10px] tracking-wider text-red-700">Database Sync Error ({syncError.source})</span>
+                <p className="mt-0.5 font-medium">{syncError.message}</p>
+                <p className="mt-1 text-[9px] text-red-500 font-mono">Ensure your authenticated staff profile has the required Firestore permissions.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSyncError(null)}
+              className="text-[10px] uppercase font-black tracking-wider px-2 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded transition-all cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {activeTab === 'dashboard' && (
           <DashboardScreen 
             orders={orders}
@@ -452,6 +565,7 @@ export default function App() {
             cafeId={cafe.id}
             categories={categories}
             menuItems={menuItems}
+            userRole={role}
           />
         )}
 
@@ -459,6 +573,8 @@ export default function App() {
           <TableScreen 
             cafeId={cafe.id}
             tables={tables}
+            orders={orders}
+            onEditOrder={handleEditOrder}
           />
         )}
 
@@ -472,6 +588,15 @@ export default function App() {
             onOpenShift={handleOpenShift}
             onCloseShift={handleCloseShift}
             currency={currency}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <SettingsScreen
+            cafeId={cafe.id}
+            cafe={cafe}
+            tables={tables}
+            staff={staff}
           />
         )}
       </main>

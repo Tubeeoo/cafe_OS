@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Table, TableStatus } from '../types';
+import { Table, TableStatus, Order } from '../types';
 import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PlusCircle, Trash2, Edit2, QrCode, Copy, Check, Users, Armchair, HelpCircle, AlertCircle } from 'lucide-react';
@@ -7,9 +7,11 @@ import { PlusCircle, Trash2, Edit2, QrCode, Copy, Check, Users, Armchair, HelpCi
 interface TableScreenProps {
   cafeId: string;
   tables: Table[];
+  orders: Order[];
+  onEditOrder: (orderId: string) => void;
 }
 
-export default function TableScreen({ cafeId, tables }: TableScreenProps) {
+export default function TableScreen({ cafeId, tables, orders = [], onEditOrder }: TableScreenProps) {
   const [newLabel, setNewLabel] = useState('');
   const [newCapacity, setNewCapacity] = useState<number>(4);
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
@@ -27,7 +29,22 @@ export default function TableScreen({ cafeId, tables }: TableScreenProps) {
     if (!newLabel.trim()) return;
 
     try {
-      const tableId = editingTableId || `table_${Date.now()}`;
+      let tableId = editingTableId;
+      if (!tableId) {
+        if (cafeId === 'demo-cafe') {
+          const allowedIds = Array.from({ length: 12 }, (_, i) => `table_${i + 1}`);
+          const existingIds = tables.map(t => t.id);
+          const unusedId = allowedIds.find(id => !existingIds.includes(id));
+          if (unusedId) {
+            tableId = unusedId;
+          } else {
+            alert('Demo limit reached: A demo café can have at most 12 tables.');
+            return;
+          }
+        } else {
+          tableId = `table_${Date.now()}`;
+        }
+      }
       const tableRef = doc(db, 'cafes', cafeId, 'tables', tableId);
       
       const tableData: Table = {
@@ -239,6 +256,8 @@ export default function TableScreen({ cafeId, tables }: TableScreenProps) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {tables.sort((a,b) => a.table_number - b.table_number).map((table) => {
+            const activeOrder = orders.find(o => o.table_id === table.id && ['open', 'kot_sent', 'served', 'held'].includes(o.status));
+
             return (
               <div
                 key={table.id}
@@ -263,12 +282,23 @@ export default function TableScreen({ cafeId, tables }: TableScreenProps) {
                       </span>
                     </div>
 
-                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider border ${
-                      table.status === 'occupied' ? 'bg-amber-100 text-amber-800 border-amber-300' :
-                      table.status === 'reserved' ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-slate-100 text-slate-800 border-slate-300'
-                    }`}>
-                      {table.status}
-                    </span>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider border ${
+                        table.status === 'occupied' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                        table.status === 'reserved' ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-slate-100 text-slate-800 border-slate-300'
+                      }`}>
+                        {table.status}
+                      </span>
+                      {activeOrder && (
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider border ${
+                          activeOrder.status === 'held'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300 ring-2 ring-amber-500/20'
+                            : 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                        }`}>
+                          {activeOrder.status === 'held' ? 'ON HOLD' : 'SERVING'}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Reservation display if present */}
@@ -300,12 +330,23 @@ export default function TableScreen({ cafeId, tables }: TableScreenProps) {
                     )}
 
                     {table.status !== 'free' && (
-                      <button
-                        onClick={() => handleUpdateStatus(table.id, 'free')}
-                        className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
-                      >
-                        Free Table
-                      </button>
+                      <>
+                        {activeOrder ? (
+                          <button
+                            onClick={() => onEditOrder(activeOrder.id)}
+                            className="flex-1 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                          >
+                            View / Settle Order
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleUpdateStatus(table.id, 'free')}
+                            className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
+                          >
+                            Free Table
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
 

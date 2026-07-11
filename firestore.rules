@@ -23,7 +23,7 @@ service cloud.firestore {
 
     // Checks if the authenticated user is a valid staff member of the specific café
     function isStaff(cafeId) {
-      return cafeId == 'demo-cafe' || (isSignedIn() && exists(/databases/$(database)/documents/cafes/$(cafeId)/staff/$(request.auth.uid)));
+      return cafeId == 'demo-cafe' || (request.auth != null && exists(/databases/$(database)/documents/cafes/$(cafeId)/staff/$(request.auth.uid)));
     }
 
     // Checks the staff member's role
@@ -49,14 +49,26 @@ service cloud.firestore {
       // Staff Subcollection
       match /staff/{staffId} {
         allow read: if isStaff(cafeId);
-        // Onboarding allows a new user to create their first staff profile (as owner)
+        // Onboarding allows a new user to create their first staff profile (as owner) or from a pending invite
         allow create: if cafeId == 'demo-cafe' || (isSignedIn() && isValidId(staffId) && (
-          staffId == request.auth.uid || isOwnerOrManager(cafeId)
+          isOwnerOrManager(cafeId) ||
+          (staffId == request.auth.uid && (
+            request.resource.data.role == 'owner' ||
+            (request.auth.token.email != null && exists(/databases/$(database)/documents/cafes/$(cafeId)/staffInvites/$(request.auth.token.email.lower())))
+          ))
         ));
         allow update: if isOwnerOrManager(cafeId) || (
           isSignedIn() && staffId == request.auth.uid && request.resource.data.role == resource.data.role
         );
         allow delete: if isOwnerOrManager(cafeId) && staffId != request.auth.uid; // Staff cannot delete themselves
+      }
+
+      // Staff Invites Subcollection
+      match /staffInvites/{email} {
+        allow read: if isOwnerOrManager(cafeId) || (
+          isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == email.lower()
+        );
+        allow create, delete: if isOwnerOrManager(cafeId);
       }
 
       // Categories Collection (Publicly readable for QR Ordering)
@@ -68,13 +80,21 @@ service cloud.firestore {
       // Menu Items Collection (Publicly readable for QR Ordering)
       match /menu_items/{itemId} {
         allow read: if true; // Publicly readable for QR Menu
-        allow write, create, update, delete: if isOwnerOrManager(cafeId);
+        allow create: if isOwnerOrManager(cafeId) && (
+          cafeId != 'demo-cafe' || (
+            itemId in ['mi_cappuccino', 'mi_latte', 'mi_icetea', 'mi_sandwich_v', 'mi_sandwich_nv', 'mi_brownie'] ||
+            itemId.matches('^item_([1-9]|1[0-5])$')
+          )
+        );
+        allow update, delete: if isOwnerOrManager(cafeId);
       }
 
       // Tables Collection (Staff managed, publicly readable/updateable status for QR occupied)
       match /tables/{tableId} {
         allow read: if true; // Publicly readable so customers can check table info
-        allow create: if isOwnerOrManager(cafeId) && isValidId(tableId);
+        allow create: if isOwnerOrManager(cafeId) && isValidId(tableId) && (
+          cafeId != 'demo-cafe' || tableId.matches('^table_([1-9]|1[0-2])$')
+        );
         allow update: if isStaff(cafeId) || (
           // QR client can update table status to 'occupied' when checking in
           request.resource.data.status == 'occupied' && resource.data.status == 'free'
@@ -92,9 +112,14 @@ service cloud.firestore {
       match /orders/{orderId} {
         allow get: if isStaff(cafeId) || true;
         allow list: if isStaff(cafeId);
-        allow create: if isStaff(cafeId) || (
+        allow create: if (isStaff(cafeId) || (
           // QR Order submission must be tagged source 'qr'
           request.resource.data.source == 'qr' && request.resource.data.status == 'open'
+        )) && (
+          cafeId != 'demo-cafe' || (
+            orderId.matches('^ord_([1-9]|[1-2][0-9]|30)$') ||
+            orderId.matches('^ord_qr_([1-9]|[1-2][0-9]|30)$')
+          )
         );
         allow update: if isStaff(cafeId) || (
           // Customers can add/update orders if they are adding items in open state

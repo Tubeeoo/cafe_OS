@@ -35,6 +35,19 @@
       },
       "required": ["authUid", "name", "role", "active", "created_at"]
     },
+    "StaffInvite": {
+      "title": "StaffInvite",
+      "description": "Pending staff invitation by email",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Staff member's full name" },
+        "email": { "type": "string", "description": "Staff member's email address" },
+        "role": { "type": "string", "enum": ["manager", "cashier", "kitchen_staff"], "description": "Future staff role" },
+        "cafeId": { "type": "string", "description": "Target café ID" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["name", "email", "role", "cafeId", "created_at"]
+    },
     "Category": {
       "title": "Category",
       "description": "Menu categories",
@@ -166,6 +179,10 @@
     "/cafes/{cafeId}/staff/{staffId}": {
       "schema": "Staff",
       "description": "Tenant specific staff accounts"
+    },
+    "/cafes/{cafeId}/staffInvites/{email}": {
+      "schema": "StaffInvite",
+      "description": "Pending staff invites by email"
     },
     "/cafes/{cafeId}/categories/{categoryId}": {
       "schema": "Category",

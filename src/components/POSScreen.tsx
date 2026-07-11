@@ -175,7 +175,7 @@ export default function POSScreen({
     return () => {
       active = false;
     };
-  }, [activeOrder, selectedTableId, cafeId]);
+  }, [activeOrder?.id, selectedTableId, cafeId]);
 
   // Handle veg/non-veg visual dot component
   const renderVegBadge = (veg_type: 'veg' | 'egg' | 'nonveg') => {
@@ -282,7 +282,29 @@ export default function POSScreen({
     try {
       const targetTable = orderType === 'dine_in' ? tables.find(t => t.id === selectedTableId) : null;
       const isNew = !activeOrder;
-      const orderId = isNew ? `ord_${Date.now()}` : activeOrder!.id;
+      let orderId = '';
+      if (isNew) {
+        if (cafeId === 'demo-cafe') {
+          const allowedIds = Array.from({ length: 30 }, (_, i) => `ord_${i + 1}`);
+          const existingIds = orders.map(o => o.id);
+          const unusedId = allowedIds.find(id => !existingIds.includes(id));
+          if (unusedId) {
+            orderId = unusedId;
+          } else {
+            const demoOrders = [...orders].filter(o => o.id.startsWith('ord_') && !o.id.startsWith('ord_qr_'));
+            if (demoOrders.length > 0) {
+              demoOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+              orderId = demoOrders[0].id;
+            } else {
+              orderId = 'ord_1';
+            }
+          }
+        } else {
+          orderId = `ord_${Date.now()}`;
+        }
+      } else {
+        orderId = activeOrder!.id;
+      }
       const prevTotal = isNew ? 0 : activeOrder!.total;
 
       // Check if total is modified to write into edit history
@@ -385,7 +407,24 @@ export default function POSScreen({
       }
 
       if (!orderId) {
-        orderId = `ord_${Date.now()}`;
+        if (cafeId === 'demo-cafe') {
+          const allowedIds = Array.from({ length: 30 }, (_, i) => `ord_${i + 1}`);
+          const existingIds = orders.map(o => o.id);
+          const unusedId = allowedIds.find(id => !existingIds.includes(id));
+          if (unusedId) {
+            orderId = unusedId;
+          } else {
+            const demoOrders = [...orders].filter(o => o.id.startsWith('ord_') && !o.id.startsWith('ord_qr_'));
+            if (demoOrders.length > 0) {
+              demoOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+              orderId = demoOrders[0].id;
+            } else {
+              orderId = 'ord_1';
+            }
+          }
+        } else {
+          orderId = `ord_${Date.now()}`;
+        }
         const targetTable = orderType === 'dine_in' ? tables.find(t => t.id === selectedTableId) : null;
         const orderData: Order = {
           id: orderId,
@@ -461,7 +500,7 @@ export default function POSScreen({
   };
 
   return (
-    <div id="pos-screen" className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-[calc(100vh-8rem)]">
+    <div id="pos-screen" className="grid grid-cols-1 lg:grid-cols-12 min-[1100px]:grid-cols-[160px_1fr_310px_250px] gap-4 h-[calc(100vh-8rem)]">
       {editingOrderId && (
         <div className="col-span-full bg-amber-600 text-white px-4 py-2.5 rounded-xl flex items-center justify-between shadow-md">
           <div className="flex items-center gap-2">
@@ -477,11 +516,11 @@ export default function POSScreen({
         </div>
       )}
       
-      {/* COLUMN 1: Category Sidebar (2/12 columns) */}
-      <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-4 flex flex-row lg:flex-col gap-2.5 overflow-x-auto lg:overflow-y-auto animate-fade-in shrink-0">
+      {/* COLUMN 1: Category Sidebar (2/12 columns / 160px fixed) */}
+      <div className="lg:col-span-2 min-[1100px]:col-span-1 bg-white rounded-2xl border border-slate-200 p-3 flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto animate-fade-in shrink-0">
         <button
           onClick={() => setSelectedCategoryId('all')}
-          className={`flex-1 lg:flex-initial py-2.5 px-4 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-2 whitespace-nowrap border ${
+          className={`flex-1 lg:flex-initial py-2 px-3 rounded-xl text-[11px] font-bold transition-all text-left flex items-center gap-2 whitespace-nowrap border ${
             selectedCategoryId === 'all' 
               ? 'bg-slate-900 border-slate-900 text-white shadow-sm' 
               : 'hover:bg-slate-50 border-slate-100 hover:border-slate-300 text-slate-600'
@@ -494,7 +533,7 @@ export default function POSScreen({
           <button
             key={cat.id}
             onClick={() => setSelectedCategoryId(cat.id)}
-            className={`flex-1 lg:flex-initial py-2.5 px-4 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-2 whitespace-nowrap border ${
+            className={`flex-1 lg:flex-initial py-2 px-3 rounded-xl text-[11px] font-bold transition-all text-left flex items-center gap-2 whitespace-nowrap border ${
               selectedCategoryId === cat.id 
                 ? 'bg-slate-900 border-slate-900 text-white shadow-sm' 
                 : 'hover:bg-slate-50 border-slate-100 hover:border-slate-300 text-slate-600'
@@ -506,8 +545,8 @@ export default function POSScreen({
         ))}
       </div>
 
-      {/* COLUMN 2: Tables + Menu Catalog (5/12 columns) */}
-      <div className="lg:col-span-5 flex flex-col gap-4 h-full overflow-hidden">
+      {/* COLUMN 1.5: Tables + Menu Catalog (5/12 columns / 1fr dynamic) */}
+      <div className="lg:col-span-5 min-[1100px]:col-span-1 flex flex-col gap-4 h-full overflow-hidden">
         
         {/* Dine-in vs Takeout Selector */}
         <div className="grid grid-cols-2 bg-slate-100 p-1 rounded-2xl shrink-0 border border-slate-200">
@@ -620,225 +659,246 @@ export default function POSScreen({
           )}
         </div>
       </div>
-
-      {/* COLUMN 3: Active Cart/Check panel (5/12 columns - widened) */}
-      <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between h-full overflow-hidden relative">
+      {/* WRAPPER FOR COLUMN 2 (Order Items) & COLUMN 3 (Payment/Checkout Summary) */}
+      <div className="col-span-1 lg:col-span-5 min-[1100px]:col-span-2 flex flex-col min-[1100px]:flex-row gap-4 h-full min-h-0 overflow-hidden">
         
-        {/* Cart Header details */}
-        <div className="border-b border-slate-200 pb-4 flex items-center justify-between shrink-0">
-          <div>
-            <h2 className="font-bold text-slate-950 tracking-wider uppercase text-sm flex items-center gap-1.5">
-              <Receipt className="w-4 h-4 text-amber-800" /> Current order
-            </h2>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
-              {activeOrder ? (
-                <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50 font-mono">
-                  #{activeOrder.id.replace('ord_', '')} ({activeOrder.status.toUpperCase()})
-                </span>
-              ) : (
-                <span className="text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/50 font-mono">
-                  NEW DRAFT
-                </span>
-              )}
-            </p>
+        {/* COLUMN 2: Order items (middle, ~340–380px) */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex-1 min-[1100px]:w-[310px] min-[1100px]:flex-none h-full flex flex-col min-h-0">
+          {/* Cart Header details */}
+          <div className="border-b border-slate-200 pb-3 flex items-center justify-between shrink-0">
+            <div>
+              <h2 className="font-bold text-slate-950 tracking-wider uppercase text-xs flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-amber-800" /> Current order
+              </h2>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
+                {activeOrder ? (
+                  <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50 font-mono">
+                    #{activeOrder.id.replace('ord_', '')} ({activeOrder.status.toUpperCase()})
+                  </span>
+                ) : (
+                  <span className="text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/50 font-mono">
+                    NEW DRAFT
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Side-by-side Fields: Customer Name & Table # */}
-        <div className="grid grid-cols-2 gap-3 mt-4 mb-2.5 shrink-0">
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Customer Name</label>
-            <input
-              type="text"
-              placeholder="Customer Name"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              disabled={isReadOnly}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-950 font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all disabled:opacity-60"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Table #</label>
-            {orderType === 'dine_in' ? (
-              <select
-                value={selectedTableId}
-                onChange={(e) => setSelectedTableId(e.target.value)}
-                disabled={isReadOnly}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-955 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all disabled:opacity-60"
+          {/* Customer fields & Add custom item button wrapper */}
+          <div className="shrink-0 flex flex-col">
+            {/* Side-by-side Fields: Customer Name & Table # */}
+            <div className="grid grid-cols-2 gap-3 mt-3 mb-2">
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  placeholder="Customer Name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  disabled={isReadOnly}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-955 font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Table #</label>
+                {orderType === 'dine_in' ? (
+                  <select
+                    value={selectedTableId}
+                    onChange={(e) => setSelectedTableId(e.target.value)}
+                    disabled={isReadOnly}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-955 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all disabled:opacity-60"
+                  >
+                    <option value="">Select Table</option>
+                    {sortedTables.map(t => (
+                      <option key={t.id} value={t.id}>{t.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value="Takeout"
+                    disabled
+                    className="w-full px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-500 font-extrabold"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Add custom item button */}
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => setShowCustomModal(true)}
+                className="w-full py-1.5 bg-amber-50 hover:bg-amber-100/70 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 mb-2 shrink-0"
               >
-                <option value="">Select Table</option>
-                {sortedTables.map(t => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
+                <Plus className="w-3.5 h-3.5 text-amber-700" />
+                Add custom item
+              </button>
+            )}
+          </div>
+
+          {/* Scrollable list of selected order items / Empty state */}
+          <div className="overflow-y-auto my-1.5 pr-1 space-y-2 flex-1 min-h-0" style={{ minHeight: 0 }}>
+            {cart.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
+                <p className="text-xs font-bold text-slate-400 tracking-wide">Tap an item to start the order</p>
+              </div>
             ) : (
-              <input
-                type="text"
-                value="Takeout"
-                disabled
-                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-500 font-extrabold"
-              />
+              cart.map((cartItem) => (
+                <div key={cartItem.id} className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl flex flex-col gap-2 animate-fade-in shrink-0">
+                  <div className="flex items-start justify-between gap-1">
+                    <div className="flex items-center gap-1.5">
+                      {cartItem.veg_type && renderVegBadge(cartItem.veg_type)}
+                      <span className="text-xs font-extrabold text-slate-950">{cartItem.menu_item_name}</span>
+                    </div>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => removeItem(cartItem.id)}
+                        className="text-slate-400 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] font-bold text-slate-600">
+                      {currency}{cartItem.unit_price} x {cartItem.quantity}
+                    </span>
+                    
+                    {/* Adjust Quantities */}
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => updateQuantity(cartItem.id, -1)}
+                          className="w-6.5 h-6.5 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-xs text-slate-600 hover:bg-slate-100 active:scale-95 transition-all shadow-sm"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-xs font-black text-slate-900 w-4 text-center font-mono">{cartItem.quantity}</span>
+                        <button
+                          onClick={() => updateQuantity(cartItem.id, 1)}
+                          className="w-6.5 h-6.5 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-xs text-slate-600 hover:bg-slate-100 active:scale-95 transition-all shadow-sm"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Cooking notes instruction */}
+                  <input
+                    type="text"
+                    placeholder="Special instruction"
+                    value={cartItem.note || ''}
+                    disabled={isReadOnly}
+                    onChange={(e) => updateLineItemNote(cartItem.id, e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-inner"
+                  />
+                </div>
+              ))
             )}
           </div>
         </div>
 
-        {/* Add custom item button */}
-        {!isReadOnly && (
-          <button
-            type="button"
-            onClick={() => setShowCustomModal(true)}
-            className="w-full py-2 bg-amber-50 hover:bg-amber-100/70 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 mb-3"
-          >
-            <Plus className="w-4 h-4 text-amber-700" />
-            Add custom item
-          </button>
-        )}
-
-        {/* Scrollable list of selected order items / Empty state */}
-        <div className="flex-1 overflow-y-auto my-2 pr-1 space-y-3 flex flex-col">
-          {cart.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-20 text-center">
-              <p className="text-xs font-bold text-slate-400 tracking-wide">Tap an item to start the order</p>
-            </div>
-          ) : (
-            cart.map((cartItem) => (
-              <div key={cartItem.id} className="p-4 bg-slate-50 border border-slate-200/60 rounded-2xl flex flex-col gap-2.5 animate-fade-in shrink-0">
-                <div className="flex items-start justify-between gap-1.5">
-                  <div className="flex items-center gap-2">
-                    {cartItem.veg_type && renderVegBadge(cartItem.veg_type)}
-                    <span className="text-sm font-extrabold text-slate-950">{cartItem.menu_item_name}</span>
-                  </div>
-                  {!isReadOnly && (
-                    <button
-                      onClick={() => removeItem(cartItem.id)}
-                      className="text-slate-400 hover:text-red-600 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-slate-600">
-                    {currency}{cartItem.unit_price} x {cartItem.quantity}
-                  </span>
-                  
-                  {/* Adjust Quantities */}
-                  {!isReadOnly && (
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => updateQuantity(cartItem.id, -1)}
-                        className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-xs text-slate-600 hover:bg-slate-100 active:scale-95 transition-all shadow-sm"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <span className="text-sm font-black text-slate-900 w-5 text-center font-mono">{cartItem.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(cartItem.id, 1)}
-                        className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-xs text-slate-600 hover:bg-slate-100 active:scale-95 transition-all shadow-sm"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Cooking notes instruction */}
-                <input
-                  type="text"
-                  placeholder="Special instruction (e.g. extra spicy)"
-                  value={cartItem.note || ''}
-                  disabled={isReadOnly}
-                  onChange={(e) => updateLineItemNote(cartItem.id, e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
-                />
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Checkout Summary panel */}
-        <div className="border-t border-slate-200 pt-4 bg-slate-50 -mx-6 -mb-6 p-6 rounded-b-2xl shrink-0">
-          <div className="space-y-2 mb-4">
-            <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <span>Subtotal</span>
-              <span className="font-mono">{currency}{subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <span>GST ({gstCollected ? 'Estimated' : '0%'})</span>
-              <span className="font-mono">{currency}{gstCollected.toFixed(2)}</span>
-            </div>
-            
-            {/* Editable Discount in ₹ */}
-            <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <span>Discount (₹)</span>
-              {isReadOnly ? (
-                <span className="font-mono text-red-600 font-extrabold">-{currency}{discountAmount.toFixed(2)}</span>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-400 font-mono text-xs">₹</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max={subtotal + gstCollected}
-                    placeholder="0"
-                    value={discountRupees || ''}
-                    onChange={(e) => {
-                      const val = Math.max(0, parseFloat(e.target.value) || 0);
-                      setDiscountRupees(Math.min(subtotal + gstCollected, val));
-                    }}
-                    className="w-20 px-2 py-1 bg-white border border-slate-200 rounded text-right text-xs font-mono font-extrabold focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <span>Round-Off</span>
-              <span className="font-mono">
-                {roundOff >= 0 ? '+' : ''}{currency}{roundOff.toFixed(2)}
+        {/* COLUMN 3: Payment (right, ~260–300px, visually distinct checkout summary sitting alongside) */}
+        <div className="bg-[#FDFBF7] border border-amber-200/60 rounded-2xl p-4 shrink-0 flex flex-col justify-between w-full min-[1100px]:w-[250px] min-[1100px]:h-full mt-4 min-[1100px]:mt-0 shadow-sm">
+          <div>
+            <div className="border-b border-amber-200/60 pb-2.5 mb-3 flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1.5">
+                <Coins className="w-3.5 h-3.5 text-amber-700" /> Checkout Summary
               </span>
             </div>
-            <div className="pt-2.5 mt-2.5 border-t border-slate-200 flex justify-between items-center">
-              <span className="font-extrabold text-slate-900 uppercase tracking-wider text-sm">Total</span>
-              <span className="font-black text-amber-800 text-2xl font-mono">{currency}{grossTotal.toFixed(2)}</span>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-[10px] font-bold text-amber-900/60 uppercase tracking-wider">
+                <span>Subtotal</span>
+                <span className="font-mono text-slate-700">{currency}{subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center text-[10px] font-bold text-amber-900/60 uppercase tracking-wider">
+                <span>GST ({gstCollected ? 'Est.' : '0%'})</span>
+                <span className="font-mono text-slate-700">{currency}{gstCollected.toFixed(2)}</span>
+              </div>
+              
+              {/* Editable Discount in ₹ */}
+              <div className="flex justify-between items-center text-[10px] font-bold text-amber-900/60 uppercase tracking-wider">
+                <span>Discount</span>
+                {isReadOnly ? (
+                  <span className="font-mono text-red-600 font-extrabold">-{currency}{discountAmount.toFixed(2)}</span>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 font-mono text-[9px]">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={subtotal + gstCollected}
+                      placeholder="0"
+                      value={discountRupees || ''}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                        setDiscountRupees(Math.min(subtotal + gstCollected, val));
+                      }}
+                      className="w-12 px-1 py-0.5 bg-white border border-amber-200/60 rounded text-right text-[10px] font-mono font-extrabold focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center text-[10px] font-bold text-amber-900/60 uppercase tracking-wider">
+                <span>Round-Off</span>
+                <span className="font-mono text-slate-700">
+                  {roundOff >= 0 ? '+' : ''}{currency}{roundOff.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2.5 pb-2.5 border-t border-b border-amber-200/60 flex justify-between items-center my-3">
+              <span className="font-bold text-amber-900/70 uppercase tracking-wider text-[11px]">Total Amount</span>
+              <span className="font-black text-amber-900 text-lg font-mono">{currency}{grossTotal.toFixed(2)}</span>
+            </div>
+
+            {/* Payment Mode */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-amber-900/60">Payment Mode</span>
+                {paymentMode && (
+                  <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/40">
+                    {paymentMode}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(['cash', 'upi', 'card'] as const).map((mode) => {
+                  const isSelected = paymentMode === mode;
+                  const labels = { cash: 'Cash', upi: 'UPI', card: 'Card' };
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={isReadOnly}
+                      onClick={() => setPaymentMode(mode)}
+                      className={`py-1.5 text-[10px] font-extrabold rounded-xl border-2 transition-all flex items-center justify-center gap-1 ${
+                        isSelected
+                          ? 'border-amber-700 text-amber-900 bg-amber-50 font-extrabold shadow-sm'
+                          : 'border-amber-200/40 text-amber-900/50 hover:bg-amber-50/50'
+                      }`}
+                    >
+                      {labels[mode]}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* Payment Mode Row: equal width pill buttons */}
-          <div className="border-t border-slate-200 pt-3.5 mb-4">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-2">Payment Mode</span>
-            <div className="grid grid-cols-3 gap-2">
-              {(['cash', 'upi', 'card'] as const).map((mode) => {
-                const isSelected = paymentMode === mode;
-                const labels = { cash: 'Cash', upi: 'UPI', card: 'Card' };
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setPaymentMode(mode)}
-                    className={`py-2 px-3 text-xs font-bold rounded-xl border-2 transition-all flex items-center justify-center gap-1.5 ${
-                      isSelected
-                        ? 'border-amber-700 text-amber-700 bg-amber-50/50 font-extrabold'
-                        : 'border-slate-200 text-slate-400 hover:bg-slate-50'
-                    }`}
-                  >
-                    {labels[mode]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Bottom Row Actions */}
-          <div className="flex gap-3 mt-4">
+          {/* Bottom Actions */}
+          <div className="flex flex-col gap-2 mt-4">
             {!isReadOnly && (
               <button
                 type="button"
                 onClick={() => handleSaveOrder('held')}
                 disabled={cart.length === 0}
-                className="flex-1 py-3.5 rounded-xl border-2 border-slate-300 font-extrabold text-xs uppercase tracking-wider text-slate-700 hover:bg-slate-100 transition-all disabled:opacity-50"
+                className="w-full py-2.5 rounded-xl border-2 border-amber-200 text-amber-900 bg-white hover:bg-amber-50/50 font-extrabold text-[10px] uppercase tracking-wider transition-all disabled:opacity-50"
               >
                 Hold Tab
               </button>
@@ -853,10 +913,10 @@ export default function POSScreen({
                 }
               }}
               disabled={!isReadOnly && cart.length === 0}
-              className={`py-3.5 rounded-xl text-white font-extrabold text-xs uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-1.5 ${
+              className={`w-full py-3 rounded-xl text-white font-extrabold text-xs uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-1.5 ${
                 isReadOnly
-                  ? 'flex-1 bg-slate-900 hover:bg-slate-800'
-                  : 'flex-[2] bg-amber-800 hover:bg-amber-900 shadow-amber-900/10'
+                  ? 'bg-slate-900 hover:bg-slate-800'
+                  : 'bg-amber-800 hover:bg-amber-900 shadow-amber-900/10'
               }`}
             >
               {isReadOnly ? 'Reprint Bill' : `Pay · ₹${grossTotal.toFixed(2)}`}

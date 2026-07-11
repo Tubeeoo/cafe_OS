@@ -102,7 +102,30 @@ export default function QRMenuScreen({ cafeId, tableId, categories, menuItems }:
         .find(o => o.table_id === tableId && (o.status === 'open' || o.status === 'kot_sent'));
 
       const isNew = !openOrder;
-      const orderId = isNew ? `ord_qr_${Date.now()}` : openOrder.id;
+      let orderId = '';
+      if (isNew) {
+        if (cafeId === 'demo-cafe') {
+          const existingOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }) as Order);
+          const allowedIds = Array.from({ length: 30 }, (_, i) => `ord_qr_${i + 1}`);
+          const existingIds = existingOrders.map(o => o.id);
+          const unusedId = allowedIds.find(id => !existingIds.includes(id));
+          if (unusedId) {
+            orderId = unusedId;
+          } else {
+            const demoQrOrders = existingOrders.filter(o => o.id.startsWith('ord_qr_'));
+            if (demoQrOrders.length > 0) {
+              demoQrOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+              orderId = demoQrOrders[0].id;
+            } else {
+              orderId = 'ord_qr_1';
+            }
+          }
+        } else {
+          orderId = `ord_qr_${Date.now()}`;
+        }
+      } else {
+        orderId = openOrder.id;
+      }
 
       // Prepare Line Items
       const lineItems: OrderItem[] = (Object.entries(cart) as [string, number][]).map(([itemId, qty]) => {
